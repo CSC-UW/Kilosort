@@ -5,7 +5,14 @@ if  getOr(rez.ops, 'nblocks', 1)==0
     return;
 end
 
+
 ops = rez.ops;
+
+% Debug 
+plotDir = getOr(ops, 'plotDir', false);
+if plotDir
+    [~, ~] = mkdir(ops.plotDir);
+end
 
 % The min and max of the y and x ranges of the channels
 ymin = min(rez.yc);
@@ -42,6 +49,7 @@ dep = dep - dmin;
 
 dmax  = 1 + ceil(max(dep)/dd);
 Nbatches      = rez.temp.Nbatch;
+batchSec      = ops.NT/ops.fs;
 
 % which batch each spike is coming from
 batch_id = st3(:,5); %ceil(st3(:,1)/dt);
@@ -92,6 +100,7 @@ end
 
 %%
 if getOr(ops, 'fig', 1)  
+
     figure;
     set(gcf, 'Color', 'w')
     
@@ -101,23 +110,44 @@ if getOr(ops, 'fig', 1)
     ylabel('drift (um)')
     title('Estimated drift traces')
     drawnow
+    if plotDir
+        saveas(gcf, fullfile(ops.plotDir, 'drift_traces.png'));
+    end
     
-    figure(194);
-    set(gcf, 'Color', 'w')
     % raster plot of all spikes at their original depths
     st_shift = st3(:,2); %+ imin(batch_id)' * dd;
+    st_depth0 = st3(:,2);
+    st_depthD = st_depth0 + imin(batch_id(:)) * dd;
+    xs = (.5:1:Nbatches)*batchSec;
+    
+    figure;
+    pos = get(gcf,'position');
+    set(gcf,'position',pos.*[1 1 1 2])  % twice taller
+    set(gcf, 'Color', 'w')
+    hax1 = subplot(2,1,1); hold on; box off
+    hax2 = subplot(2,1,2); hold on; box off
+
     for j = spkTh:100
         % for each amplitude bin, plot all the spikes of that size in the
         % same shade of gray
         ix = st3(:, 3)==j; % the amplitudes are rounded to integers
-        plot(st3(ix, 1)/ops.fs, st_shift(ix), '.', 'color', [1 1 1] * max(0, 1-j/40)) % the marker color here has been carefully tuned
-        hold on
+        thisCol = [1 1 1] * max(0, 1-j/60);
+        plot(hax1, st3(ix, 1)/ops.fs, st_depth0(ix), '.', 'color', thisCol) % the marker color here has been carefully tuned
+        plot(hax2, st3(ix, 1)/ops.fs, st_depthD(ix), '.', 'color', thisCol) % the marker color here has been carefully tuned
     end
     axis tight
+    linkaxes([hax1,hax2]);
+    plot(hax1, xs, imin * dd +diff(ylim(hax2))/2, '-r');
 
-    xlabel('time (sec)')
-    ylabel('spike position (um)')
-    title('Drift map')
+    title(hax1, 'Drift map: Initial', 'interp','none')
+    ylabel(hax1, 'Init spike position (um)')
+    title(hax2, 'Drift map: Corrected', 'interp','none')    
+    ylabel(hax2, 'Shifted spike position (um)')
+    xlabel(hax2, 'time (sec)')
+
+    if plotDir
+        saveas(gcf, fullfile(ops.plotDir, 'drift_map.png'));
+    end
     
 end
 %%
