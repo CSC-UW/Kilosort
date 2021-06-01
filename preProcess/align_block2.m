@@ -108,12 +108,12 @@ end
 
 
 %%
-Fg = gpuArray(single(F));
-imax = sq(sum(dall(1:niter-1,:),1));
-for t = 1:length(dt)
-    ib = imax==dt(t);
-    Fg(:, :, ib) = circshift(Fg(:, :, ib), dt(t), 1);
-end
+% Fg = gpuArray(single(F));
+% imax = sq(sum(dall(1:niter-1,:),1));
+% for t = 1:length(dt)
+%     ib = imax==dt(t);
+%     Fg(:, :, ib) = circshift(Fg(:, :, ib), dt(t), 1);
+% end
 F0m = mean(Fg,3);
 
 
