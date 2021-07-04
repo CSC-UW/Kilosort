@@ -1,6 +1,6 @@
 function [imin,yblk, F0, F0m] = align_block2_nonrigid_target(F, ysamp, nblocks)
 
-fprintf('Align block with non-rigid target template\n', dmin)
+fprintf('Align block with non-rigid target template\n')
 
 % F is y bins by amp bins by batches
 % ysamp are the coordinates of the y bins in um
