@@ -98,6 +98,8 @@ for j = 1:nblocks
     % find the  max of these curves
     [~, imax] = max(dcup, [], 1);
     
+    
+    
     % add the value of the shift to the last row of the matrix of shifts
     % (as if it was the last iteration of the main rigid loop )
     dall(niter, :) = dtup(imax);

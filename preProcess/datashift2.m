@@ -94,7 +94,7 @@ if isfield(ops, 'midpoint')
     imin = imin - mean(imin);
     ops.datashift = 1;
 else
-    % determine registration offsets 
+    % determine registration offsets  
     ysamp = dmin + dd * [1:dmax] - dd/2;
     [imin,yblk, F0, F0m] = align_block2_nonrigid_target(F, ysamp, ops.nblocks);
 end

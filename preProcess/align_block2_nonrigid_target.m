@@ -1,6 +1,9 @@
 function [imin,yblk, F0, F0m] = align_block2_nonrigid_target(F, ysamp, nblocks)
 
-fprintf('Align block with non-rigid target template\n')
+threshold1 = 0.1;
+threshold2 = 0.15;
+
+fprintf('Align block with non-rigid target template cor output\n')
 
 % F is y bins by amp bins by batches
 % ysamp are the coordinates of the y bins in um
@@ -41,8 +44,9 @@ yblk = zeros(length(ifirst), 1);
 dall = zeros(niter_rigid + niter_nonrigid, Nbatches, nblocks);
 
 %% first we do rigid registration by integer shifts
-% everything is iteratively aligned until most of the shifts become 0. 
-for iter = 1:niter_rigid    
+% everything is iteratively aligned until most of the shifts become 0.
+
+for iter = 1:niter_rigid
     for t = 1:length(dt)
         % for each NEW potential shift, estimate covariance
         Fs = circshift(Fg, dt(t), 1);
@@ -51,7 +55,7 @@ for iter = 1:niter_rigid
     
     % estimate the best shifts
     [~, imax] = max(dc, [], 1);
-
+    
     % align the data by these integer shifts
     for t = 1:length(dt)
         ib = imax==t;
@@ -70,15 +74,33 @@ end
 
 % for each small block, we only look up and down this many samples to find
 % nonrigid shift
-n = 30;
+n = 15;
 dt = -n:n;
 dcs = zeros(2*n+1, Nbatches, nblocks);
 
 %% Non-rigid iterations (integer shifts)
 % Now we register each block and update the target frame
 % All shifts are integer except the very last iteration
-for iter = 1:niter_nonrigid - 1
 
+% i calculate the variances externally, since they aren't supposed to
+% depend on the shift (actually is not a true variance but ok)
+
+dev1 = zeros(nblocks,Nbatches); % later i will pre-allocate for speed
+dev2 = zeros(nblocks,Nbatches);
+
+good_indexes_logical = zeros(nblocks,Nbatches);
+
+for j=1:nblocks
+    isub = ifirst(j):ilast(j);
+    dev1(j,:) = gather(sqrt(sq(mean(mean(Fg(isub, :, :) .* Fg(isub, :, :), 1), 2))));
+    dev2(j,:) = gather(sqrt(sq(mean(mean(F0(isub, :, :) .* F0(isub, :, :), 1), 2))));
+    
+end
+
+devtot = dev1.*dev2;
+
+for iter = 1:niter_nonrigid - 1
+    
     % Shift each block independently
     for j = 1:nblocks
         isub = ifirst(j):ilast(j);
@@ -87,15 +109,27 @@ for iter = 1:niter_nonrigid - 1
         Fsub = Fg(isub, :, :);
         
         for t = 1:length(dt)
-            % for each potential shift, estimate covariance
+            % for each potential shift, estimate CORRELATION by normalizing
             Fs = circshift(Fsub, dt(t), 1);
             dcs(t, :, j) = gather(sq(mean(mean(Fs .* F0(isub, :, :), 1), 2)));
+            dcs(t, :, j) = dcs(t, :, j)./devtot(j,:);
         end
-
+        
         % integer shift for all iterations except last one
-        if iter < niter_nonrigid
+        % i think this if is useless since iter goes up to niter -1 
+%         if iter < niter_nonrigid
             % estimate the best shifts
-            [~, imax] = max(dcs(:, :, j), [], 1);
+            [cor_max, imax] = max(dcs(:, :, j), [], 1);
+            
+            if iter < niter_nonrigid -2
+                good_indexes1 = 1:Nbatches;
+            else
+                [cor_min, ~] = min(dcs(:, :, j), [], 1);
+                diff = cor_max-cor_min;
+                good_indexes1 = find(diff>threshold1);
+                logicals = diff>threshold1;
+            end
+            
             
             % align the data by these integer shifts
             for t = 1:length(dt)
@@ -105,46 +139,69 @@ for iter = 1:niter_nonrigid - 1
                 Fg(isub, :, ib) = circshift(Fg(isub, :, ib), dt(t), 1);
                 dall(niter_rigid + iter, ib, j) = dt(t);
             end
-
+            
             % new target frame based on current best alignment for current block
-            F0(isub, :) = mean(Fg(isub, :, :), 3);
-
+            % can I do logical indexing? If yes, we can speed up
+            F0(isub, :) = mean(Fg(isub, :, good_indexes1), 3);
+            
+%         end
+        
+        if iter > niter_nonrigid -2
+            good_indexes_logical(j,:) = logicals;     
+        end
+        
+    end
+end
+    
+    %% (last iteration): sub-integer shifts
+    
+    % to find sub-integer shifts for each block ,
+    % we now use upsampling, based on kriging interpolation
+    dtup = linspace(-n, n, (2*n*10)+1);
+    K = kernelD(dt,dtup,1); % this kernel is fixed as a variance of 1
+    dcs = my_conv2(dcs, .5, [1, 2, 3]); % some additional smoothing for robustness, across all dimensions
+    
+    for j = 1:nblocks
+        % using the upsampling kernel K, get the upsampled cross-correlation
+        % curves
+        dcup = K' * dcs(:,:,j);
+        
+        % find the  max of these curves
+        [cor_max, imax] = max(dcup, [], 1);
+        [cor_min, ~] = min(dcup, [], 1);
+        
+        diff = cor_max-cor_min;
+        good_indexes2 = find(diff>threshold2);
+        
+        % add the value of the shift to the last row of the matrix of shifts
+        % (as if it was the last iteration of the main non-rigid loop )
+        dall(niter_rigid + niter_nonrigid, :, j) = dtup(imax);
+        
+    end
+    
+    
+    % the sum of all the shifts (rigid and non-rigid) equals the final shifts for each block
+    imin = zeros(Nbatches, nblocks);
+    
+    for j = 1:nblocks
+        imin(1,j) = sum(dall(:,1,j),1);
+        for k = 2:Nbatches
+            if good_indexes_logical(j,k)
+                imin(k,j) = sum(dall(:,k,j),1);
+            else
+                imin(k,j) = imin(k-1,j);
+            end
+            
         end
     end
-
-end
-
-%% (last iteration): sub-integer shifts
-
-% to find sub-integer shifts for each block , 
-% we now use upsampling, based on kriging interpolation
-dtup = linspace(-n, n, (2*n*10)+1);    
-K = kernelD(dt,dtup,1); % this kernel is fixed as a variance of 1
-dcs = my_conv2(dcs, .5, [1, 2, 3]); % some additional smoothing for robustness, across all dimensions
-
-for j = 1:nblocks
-    % using the upsampling kernel K, get the upsampled cross-correlation
-    % curves
-    dcup = K' * dcs(:,:,j);
     
-    % find the  max of these curves
-    [~, imax] = max(dcup, [], 1);
     
-    % add the value of the shift to the last row of the matrix of shifts
-    % (as if it was the last iteration of the main non-rigid loop )
-    dall(niter_rigid + niter_nonrigid, :, j) = dtup(imax);
+    %%
+    
+    % Doesn't include the last upsampled iteration
+    F0m = mean(Fg(:, :, good_indexes2),3);
+    
 end
-
-
-% the sum of all the shifts (rigid and non-rigid) equals the final shifts for each block
-imin = zeros(Nbatches, nblocks);
-for j = 1:nblocks
-    imin(:,j) = sum(dall(:,:,j),1);% 
-end
-
-
-%%
-% Doesn't include the last upsampled iteration
-F0m = mean(Fg,3);
-
+    
+    
 
