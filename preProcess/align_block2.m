@@ -3,6 +3,8 @@ function [imin,yblk, F0, F0m] = align_block2(F, ysamp, nblocks)
 % F is y bins by amp bins by batches
 % ysamp are the coordinates of the y bins in um
 
+fprintf('Align block with original kilosort2.5 algorithm\n');
+
 Nbatches = size(F,3);
 
 % look up and down this many y bins to find best alignment
