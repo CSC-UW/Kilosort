@@ -13,7 +13,7 @@ plotDir = getOr(ops, 'plotDir', false);
 if plotDir
     [~, ~] = mkdir(ops.plotDir);
 end
-debugPlot = do_correction;  % No debugging plot if we don't shift data on file
+debugPlot = ops.debugPlot & do_correction;  % No debugging plot if we don't shift data on file
 
 % The min and max of the y and x ranges of the channels
 ymin = min(rez.yc);
