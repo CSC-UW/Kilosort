@@ -1,3 +1,7 @@
+# CSC-UW changes to vanilla Kilosort 2.5
+
+Detailed comparison: https://github.com/CSC-UW/Kilosort/compare/main...wisc/2.5/dev
+
 # Kilosort2.5: automated spike sorting with drift correction and template matching on GPUs #
 
 *updated from Kilosort2 on Oct 28, 2020. The repository name has changed to just "Kilosort", and we'll keep track of versions via Github releases.* 
