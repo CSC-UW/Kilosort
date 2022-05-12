@@ -1,6 +1,35 @@
+### Tags and branches
+- "v2.5" tag points to vanilla v2.5. "main"/"upstream/main" to v3.0.
+- "wisc/2.5/dev" is the base CSC-UW version, with the original drift correction algorithm
+- "wisc/2.5/non-rigid-template" and "wisc/2.5/non-rigid-template-gda" use a different version of the drift correction algorithm which may work better for datasets large non-rigid drift
+
 # CSC-UW changes to vanilla Kilosort 2.5
 
-Detailed comparison: https://github.com/CSC-UW/Kilosort/compare/main...wisc/2.5/dev
+Detailed comparison: https://github.com/CSC-UW/Kilosort/compare/v2.5...wisc/2.5/dev
+
+Some of these changes would be sensible PRs but I'm not sure v2.5 is maintained anymore
+
+Summary, updated 5/11/2022:
+
+**wisc/2.5/dev branch**:
+- Save drift maps if `ops.plotDir` is set
+  - Commits: [1](https://github.com/CSC-UW/Kilosort/commit/d74018a6566b8aa22fc68fa75f0e97a4df2dcac1) [2](https://github.com/CSC-UW/Kilosort/commit/48825c0d8dbd8fa29cc6ca16e3f0c4756d71684a)
+  - This saves a general (whole probe) figure and multiple zoomed versions of the figure with 3 subplots : (dot color is spike amplitude)
+      1. spike sorting on original temp_wh.dat
+      2. spike sorting + estimated drift
+      3. spike sorting on final drift corrected data. In theory this should be identical as 2. but that's not always exactly the case so may be useful for debugging purpose. 
+  - Generating the 3rd plot requires doing a second pass of spikedetection after the in-place drift correction happening onto temp_wh.dat, which is SLOW
+  - The 3rd plot (debugPlot) is not generated if
+    1. There is no no actual drift correction performed ( `not ops.do_correction` )
+    1. ops.debugPlot is set to false (default true)
+- Increase maximal number of spikes per batches for preprocessing spike detection
+  - Commits: [1](https://github.com/CSC-UW/Kilosort/commit/8e343b5e12ffffbcf72e881dac13a2c78d348a05) [2](https://github.com/CSC-UW/Kilosort/commit/30f2b50de7a76c5697ed9ad7974580f153f3ebd7) 
+  - Otherwise when there's many spikes or large batches some spikes at the dorsal end of the probe are ignored, which can mess up drift correction
+
+### Changes merged in vanilla Kilosort2.5
+
+### Reverted changes
+
 
 # Kilosort2.5: automated spike sorting with drift correction and template matching on GPUs #
 
