@@ -9,10 +9,9 @@ end
 ops = rez.ops;
 
 % Debug 
-plotDir = getOr(ops, 'plotDir', false);
-if plotDir
-    [~, ~] = mkdir(ops.plotDir);
-end
+plotDir = getOr(ops, 'plotDir', fullfile(ops.root, 'plots_ks'));
+ops.plotDir = plotDir;
+[~, ~] = mkdir(ops.plotDir);
 debugPlot = getOr(ops, 'debugPlot', true);  % No debugging plot if ops.debugPlot == false
 debugPlot = debugPlot & do_correction;  % No debugging plot if we don't shift data on file
 
