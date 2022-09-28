@@ -18,7 +18,7 @@ dist = dist(:, igood);
 ycup = ycup(igood);
 xcup = xcup(igood);
 
-NchanNearUp =  10*NchanNear;
+NchanNearUp = min(numel(xcup), 10*NchanNear);
 [iC2, dist2] = getClosestChannels2(ycup, xcup, ycup, xcup, NchanNearUp);
 
 nsizes = 5;
