@@ -23,7 +23,7 @@ Summary, updated 5/11/2022:
   - Generating the 3rd plot requires doing a second pass of spikedetection after the in-place drift correction happening onto temp_wh.dat, which is SLOW
   - The 3rd plot (debugPlot) is not generated if
     1. There is no no actual drift correction performed ( `not ops.do_correction` )
-    1. ops.debugPlot is set to false (default true)
+    1. ops.debugPlot is set to false (default false)
 - Increase maximal number of spikes per batches for preprocessing spike detection
   - Commits: [1](https://github.com/CSC-UW/Kilosort/commit/8e343b5e12ffffbcf72e881dac13a2c78d348a05) [2](https://github.com/CSC-UW/Kilosort/commit/30f2b50de7a76c5697ed9ad7974580f153f3ebd7) 
   - Otherwise when there's many spikes or large batches some spikes at the dorsal end of the probe are ignored, which can mess up drift correction
