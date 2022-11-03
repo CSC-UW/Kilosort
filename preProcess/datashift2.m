@@ -1,5 +1,10 @@
 function rez = datashift2(rez, do_correction)
 
+if ~getOr(rez.ops, 'do_preprocessing', true)
+    % disable drift correction
+    rez.ops.nblocks = 0
+end
+    
 if  getOr(rez.ops, 'nblocks', 1)==0
     rez.iorig = 1:rez.temp.Nbatch;
     return;

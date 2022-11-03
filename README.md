@@ -12,6 +12,8 @@ Some of these changes would be sensible PRs but I'm not sure v2.5 is maintained 
 Summary, updated 5/11/2022:
 
 **wisc/2.5/dev branch**:
+- Allow disabling ALL kilosort preprocessing (sort directly on input file) with `ops.do_preprocessing = false`.
+  - Saves identity matrix as whitening matrix
 - Always save drift maps, to ops.plotDir (<output_dir>/'plots_ks' by default)
   - Commits: [1](https://github.com/CSC-UW/Kilosort/commit/d74018a6566b8aa22fc68fa75f0e97a4df2dcac1) [2](https://github.com/CSC-UW/Kilosort/commit/48825c0d8dbd8fa29cc6ca16e3f0c4756d71684a)
   - This saves a general (whole probe) figure and multiple zoomed versions of the figure with 3 subplots : (dot color is spike amplitude)

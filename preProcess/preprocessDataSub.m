@@ -44,78 +44,88 @@ rez.ops.chanMap = chanMap;
 rez.ops.kcoords = kcoords;
 
 
-NTbuff      = NT + 3*ops.ntbuff; % we need buffers on both sides for filtering
+if ~getOr(ops, 'do_preprocessing', true)
 
-rez.ops.Nbatch = Nbatch;
-rez.ops.NTbuff = NTbuff;
-rez.ops.chanMap = chanMap;
+    fprintf('Time %3.0fs. Not performing any preprocessing: sorting input binary file.. \n', toc);
+    rez.ops.fproc = ops.fbinary;
+    rez.temp.Nbatch = Nbatch;
+    rez.Wrot = eye(ops.Nchan);
 
+else
 
-fprintf('Time %3.0fs. Computing whitening matrix.. \n', toc);
+    NTbuff      = NT + 3*ops.ntbuff; % we need buffers on both sides for filtering
 
-% this requires removing bad channels first
-Wrot = get_whitening_matrix(rez); % outputs a rotation matrix (Nchan by Nchan) which whitens the zero-timelag covariance of the data
-% Wrot = gpuArray.eye(size(Wrot,1), 'single');
-% Wrot = diag(Wrot);
+    rez.ops.Nbatch = Nbatch;
+    rez.ops.NTbuff = NTbuff;
+    rez.ops.chanMap = chanMap;
 
-fprintf('Time %3.0fs. Loading raw data and applying filters... \n', toc);
+    fprintf('Time %3.0fs. Computing whitening matrix.. \n', toc);
 
-fid         = fopen(ops.fbinary, 'r'); % open for reading raw data
-if fid<3
-    error('Could not open %s for reading.',ops.fbinary);
-end
-fidW        = fopen(ops.fproc,   'w+'); % open for writing processed data
-if fidW<3
-    error('Could not open %s for writing.',ops.fproc);    
-end
+    % this requires removing bad channels first
+    Wrot = get_whitening_matrix(rez); % outputs a rotation matrix (Nchan by Nchan) which whitens the zero-timelag covariance of the data
+    % Wrot = gpuArray.eye(size(Wrot,1), 'single');
+    % Wrot = diag(Wrot);
 
-% weights to combine batches at the edge
-w_edge = linspace(0, 1, ops.ntbuff)';
-ntb = ops.ntbuff;
-datr_prev = gpuArray.zeros(ntb, ops.Nchan, 'single');
+    fprintf('Time %3.0fs. Loading raw data and applying filters... \n', toc);
 
-for ibatch = 1:Nbatch
-    % we'll create a binary file of batches of NT samples, which overlap consecutively on ops.ntbuff samples
-    % in addition to that, we'll read another ops.ntbuff samples from before and after, to have as buffers for filtering
-    offset = max(0, ops.twind + 2*NchanTOT*(NT * (ibatch-1) - ntb)); % number of samples to start reading at.
+    fid         = fopen(ops.fbinary, 'r'); % open for reading raw data
+    if fid<3
+        error('Could not open %s for reading.',ops.fbinary);
+    end
+    fidW        = fopen(ops.fproc,   'w+'); % open for writing processed data
+    if fidW<3
+        error('Could not open %s for writing.',ops.fproc);    
+    end
+
+    % weights to combine batches at the edge
+    w_edge = linspace(0, 1, ops.ntbuff)';
+    ntb = ops.ntbuff;
+    datr_prev = gpuArray.zeros(ntb, ops.Nchan, 'single');
+
+    for ibatch = 1:Nbatch
+        % we'll create a binary file of batches of NT samples, which overlap consecutively on ops.ntbuff samples
+        % in addition to that, we'll read another ops.ntbuff samples from before and after, to have as buffers for filtering
+        offset = max(0, ops.twind + 2*NchanTOT*(NT * (ibatch-1) - ntb)); % number of samples to start reading at.
+        
+        fseek(fid, offset, 'bof'); % fseek to batch start in raw file
+
+        buff = fread(fid, [NchanTOT NTbuff], '*int16'); % read and reshape. Assumes int16 data (which should perhaps change to an option)
+        if isempty(buff)
+            break; % this shouldn't really happen, unless we counted data batches wrong
+        end
+        nsampcurr = size(buff,2); % how many time samples the current batch has
+        if nsampcurr<NTbuff
+            buff(:, nsampcurr+1:NTbuff) = repmat(buff(:,nsampcurr), 1, NTbuff-nsampcurr); % pad with zeros, if this is the last batch
+        end
+        if offset==0
+            bpad = repmat(buff(:,1), 1, ntb);
+            buff = cat(2, bpad, buff(:, 1:NTbuff-ntb)); % The very first batch has no pre-buffer, and has to be treated separately
+        end
+        
+        datr    = gpufilter(buff, ops, chanMap); % apply filters and median subtraction
+        
+    %     datr(ntb + [1:ntb], :) = datr_prev;
+        datr(ntb + [1:ntb], :) = w_edge .* datr(ntb + [1:ntb], :) +...
+            (1 - w_edge) .* datr_prev;
     
-    fseek(fid, offset, 'bof'); % fseek to batch start in raw file
-
-    buff = fread(fid, [NchanTOT NTbuff], '*int16'); % read and reshape. Assumes int16 data (which should perhaps change to an option)
-    if isempty(buff)
-        break; % this shouldn't really happen, unless we counted data batches wrong
-    end
-    nsampcurr = size(buff,2); % how many time samples the current batch has
-    if nsampcurr<NTbuff
-        buff(:, nsampcurr+1:NTbuff) = repmat(buff(:,nsampcurr), 1, NTbuff-nsampcurr); % pad with zeros, if this is the last batch
-    end
-    if offset==0
-        bpad = repmat(buff(:,1), 1, ntb);
-        buff = cat(2, bpad, buff(:, 1:NTbuff-ntb)); % The very first batch has no pre-buffer, and has to be treated separately
-    end
+        datr_prev = datr(ntb +NT + [1:ops.ntbuff], :);
+        datr    = datr(ntb + (1:NT),:); % remove timepoints used as buffers
     
-    datr    = gpufilter(buff, ops, chanMap); % apply filters and median subtraction
-    
-%     datr(ntb + [1:ntb], :) = datr_prev;
-    datr(ntb + [1:ntb], :) = w_edge .* datr(ntb + [1:ntb], :) +...
-        (1 - w_edge) .* datr_prev;
-   
-    datr_prev = datr(ntb +NT + [1:ops.ntbuff], :);
-    datr    = datr(ntb + (1:NT),:); % remove timepoints used as buffers
-   
-    datr    = datr * Wrot; % whiten the data and scale by 200 for int16 range
+        datr    = datr * Wrot; % whiten the data and scale by 200 for int16 range
 
-    datcpu  = gather(int16(datr')); % convert to int16, and gather on the CPU side
-    count = fwrite(fidW, datcpu, 'int16'); % write this batch to binary file
-    if count~=numel(datcpu)
-        error('Error writing batch %g to %s. Check available disk space.',ibatch,ops.fproc);
+        datcpu  = gather(int16(datr')); % convert to int16, and gather on the CPU side
+        count = fwrite(fidW, datcpu, 'int16'); % write this batch to binary file
+        if count~=numel(datcpu)
+            error('Error writing batch %g to %s. Check available disk space.',ibatch,ops.fproc);
+        end
     end
+    fclose(fidW); % close the files
+    fclose(fid);
+
+    rez.Wrot    = gather(Wrot); % gather the whitening matrix as a CPU variable
+
+    fprintf('Time %3.0fs. Finished preprocessing %d batches. \n', toc, Nbatch);
+
+    rez.temp.Nbatch = Nbatch;
+
 end
-fclose(fidW); % close the files
-fclose(fid);
-
-rez.Wrot    = gather(Wrot); % gather the whitening matrix as a CPU variable
-
-fprintf('Time %3.0fs. Finished preprocessing %d batches. \n', toc, Nbatch);
-
-rez.temp.Nbatch = Nbatch;
